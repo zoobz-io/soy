@@ -20,7 +20,7 @@ We take the security of soy seriously. If you have discovered a security vulnera
 Instead, please report them via one of the following methods:
 
 1. **GitHub Security Advisories** (Preferred)
-   - Go to the [Security tab](https://github.com/zoobzio/soy/security) of this repository
+   - Go to the [Security tab](https://github.com/zoobz-io/soy/security) of this repository
    - Click "Report a vulnerability"
    - Fill out the form with details about the vulnerability
 
@@ -58,7 +58,7 @@ When using soy in your applications, we recommend:
 
 1. **Keep Dependencies Updated**
    ```bash
-   go get -u github.com/zoobzio/soy
+   go get -u github.com/zoobz-io/soy
    ```
 
 2. **Use Context Properly**

@@ -3,7 +3,7 @@ package soy
 import (
 	"fmt"
 
-	"github.com/zoobzio/astql"
+	"github.com/zoobz-io/astql"
 )
 
 // caseState holds the shared state for CASE expression builders.

@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/zoobzio/astql"
-	"github.com/zoobzio/astql/mariadb"
-	"github.com/zoobzio/astql/mssql"
-	"github.com/zoobzio/astql/postgres"
-	"github.com/zoobzio/sentinel"
+	"github.com/zoobz-io/astql"
+	"github.com/zoobz-io/astql/mariadb"
+	"github.com/zoobz-io/astql/mssql"
+	"github.com/zoobz-io/astql/postgres"
+	"github.com/zoobz-io/sentinel"
 )
 
 type createTestUser struct {

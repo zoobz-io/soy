@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/zoobzio/astql"
-	"github.com/zoobzio/capitan"
+	"github.com/zoobz-io/astql"
+	"github.com/zoobz-io/capitan"
 )
 
 // executeBatch is a shared helper for batch execution logic used by Update and Delete.

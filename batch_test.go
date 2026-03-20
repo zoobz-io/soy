@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/zoobzio/astql"
-	"github.com/zoobzio/astql/postgres"
+	"github.com/zoobz-io/astql"
+	"github.com/zoobz-io/astql/postgres"
 )
 
 // Test model for batch tests.

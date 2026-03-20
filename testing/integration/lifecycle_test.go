@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/zoobzio/astql/postgres"
-	"github.com/zoobzio/soy"
+	"github.com/zoobz-io/astql/postgres"
+	"github.com/zoobz-io/soy"
 )
 
 func TestLifecycle_OnScan_Select(t *testing.T) {

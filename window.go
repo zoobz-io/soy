@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/zoobzio/astql"
+	"github.com/zoobz-io/astql"
 )
 
 // windowState holds the shared state for window function builders.

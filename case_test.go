@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/zoobzio/astql/postgres"
-	"github.com/zoobzio/sentinel"
+	"github.com/zoobz-io/astql/postgres"
+	"github.com/zoobz-io/sentinel"
 )
 
 // caseTestUser is the test struct for CASE expression tests.

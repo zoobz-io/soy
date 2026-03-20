@@ -1,6 +1,6 @@
 package soy
 
-import "github.com/zoobzio/capitan"
+import "github.com/zoobz-io/capitan"
 
 // Query execution signals.
 var (

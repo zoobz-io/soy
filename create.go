@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/zoobzio/astql"
-	"github.com/zoobzio/atom"
-	"github.com/zoobzio/capitan"
+	"github.com/zoobz-io/astql"
+	"github.com/zoobz-io/atom"
+	"github.com/zoobz-io/capitan"
 )
 
 // Create provides a focused API for building INSERT queries.

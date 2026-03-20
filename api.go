@@ -80,9 +80,9 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/zoobzio/astql"
-	"github.com/zoobzio/sentinel"
-	"github.com/zoobzio/soy/internal/scanner"
+	"github.com/zoobz-io/astql"
+	"github.com/zoobz-io/sentinel"
+	"github.com/zoobz-io/soy/internal/scanner"
 )
 
 // CastType represents SQL cast types.

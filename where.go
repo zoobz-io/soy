@@ -1,7 +1,7 @@
 package soy
 
 import (
-	"github.com/zoobzio/astql"
+	"github.com/zoobz-io/astql"
 )
 
 // whereBuilder provides shared WHERE clause building logic for query builders.

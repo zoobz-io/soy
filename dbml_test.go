@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zoobzio/dbml"
-	"github.com/zoobzio/sentinel"
+	"github.com/zoobz-io/dbml"
+	"github.com/zoobz-io/sentinel"
 )
 
 type TestUser struct {

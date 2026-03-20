@@ -61,7 +61,7 @@ go test -bench=. -benchmem ./testing/benchmarks/
 The `testing` package provides mock implementations for testing soy-based applications without a real database:
 
 ```go
-import soytesting "github.com/zoobzio/soy/testing"
+import soytesting "github.com/zoobz-io/soy/testing"
 
 func TestMyQuery(t *testing.T) {
     mock := soytesting.NewMockDB(t)

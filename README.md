@@ -1,13 +1,13 @@
 # soy
 
-[![CI Status](https://github.com/zoobzio/soy/workflows/CI/badge.svg)](https://github.com/zoobzio/soy/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/zoobzio/soy/graph/badge.svg?branch=main)](https://codecov.io/gh/zoobzio/soy)
-[![Go Report Card](https://goreportcard.com/badge/github.com/zoobzio/soy)](https://goreportcard.com/report/github.com/zoobzio/soy)
-[![CodeQL](https://github.com/zoobzio/soy/workflows/CodeQL/badge.svg)](https://github.com/zoobzio/soy/security/code-scanning)
-[![Go Reference](https://pkg.go.dev/badge/github.com/zoobzio/soy.svg)](https://pkg.go.dev/github.com/zoobzio/soy)
-[![License](https://img.shields.io/github/license/zoobzio/soy)](LICENSE)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/zoobzio/soy)](go.mod)
-[![Release](https://img.shields.io/github/v/release/zoobzio/soy)](https://github.com/zoobzio/soy/releases)
+[![CI Status](https://github.com/zoobz-io/soy/workflows/CI/badge.svg)](https://github.com/zoobz-io/soy/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/zoobz-io/soy/graph/badge.svg?branch=main)](https://codecov.io/gh/zoobz-io/soy)
+[![Go Report Card](https://goreportcard.com/badge/github.com/zoobz-io/soy)](https://goreportcard.com/report/github.com/zoobz-io/soy)
+[![CodeQL](https://github.com/zoobz-io/soy/workflows/CodeQL/badge.svg)](https://github.com/zoobz-io/soy/security/code-scanning)
+[![Go Reference](https://pkg.go.dev/badge/github.com/zoobz-io/soy.svg)](https://pkg.go.dev/github.com/zoobz-io/soy)
+[![License](https://img.shields.io/github/license/zoobz-io/soy)](LICENSE)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/zoobz-io/soy)](go.mod)
+[![Release](https://img.shields.io/github/v/release/zoobz-io/soy)](https://github.com/zoobz-io/soy/releases)
 
 Type-safe SQL query builder for Go with schema validation and multi-database support.
 
@@ -37,7 +37,7 @@ Field names validated against struct tags. Type-safe results. No reflection on t
 ## Install
 
 ```bash
-go get github.com/zoobzio/soy
+go get github.com/zoobz-io/soy
 ```
 
 Requires Go 1.24+.
@@ -54,8 +54,8 @@ import (
 
     "github.com/jmoiron/sqlx"
     _ "github.com/lib/pq"
-    "github.com/zoobzio/astql/pkg/postgres"
-    "github.com/zoobzio/soy"
+    "github.com/zoobz-io/astql/pkg/postgres"
+    "github.com/zoobz-io/soy"
 )
 
 type User struct {
@@ -116,7 +116,7 @@ func main() {
 | ----------------- | ------------------------------------------------------------------------------------- | ------------------------------------------- |
 | Type-Safe Queries | Generics return `*T` or `[]*T`, not `interface{}`                                     | [Queries](docs/3.guides/1.queries.md)       |
 | Schema Validation | Field names checked against struct tags at init                                       | [Concepts](docs/2.learn/2.concepts.md)      |
-| Multi-Database    | PostgreSQL, MariaDB, SQLite, SQL Server via [ASTQL](https://github.com/zoobzio/astql) | [Quickstart](docs/2.learn/1.quickstart.md)  |
+| Multi-Database    | PostgreSQL, MariaDB, SQLite, SQL Server via [ASTQL](https://github.com/zoobz-io/astql) | [Quickstart](docs/2.learn/1.quickstart.md)  |
 | Fluent Builders   | Chainable API for SELECT, INSERT, UPDATE, DELETE                                      | [Mutations](docs/3.guides/2.mutations.md)   |
 | Aggregates        | COUNT, SUM, AVG, MIN, MAX with FILTER clauses                                         | [Aggregates](docs/3.guides/3.aggregates.md) |
 | Window Functions  | ROW_NUMBER, RANK, LAG, LEAD, and more                                                 | [API](docs/5.reference/1.api.md)            |
@@ -136,7 +136,7 @@ func main() {
 
 Soy enables a pattern: **define types once, query safely everywhere**.
 
-Your struct definitions become the contract. [Sentinel](https://github.com/zoobzio/sentinel) extracts metadata from struct tags. [ASTQL](https://github.com/zoobzio/astql) validates queries against that schema. Soy wraps it all in a fluent API.
+Your struct definitions become the contract. [Sentinel](https://github.com/zoobz-io/sentinel) extracts metadata from struct tags. [ASTQL](https://github.com/zoobz-io/astql) validates queries against that schema. Soy wraps it all in a fluent API.
 
 ```go
 // Your domain type — the single source of truth

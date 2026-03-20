@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/zoobzio/dbml"
-	"github.com/zoobzio/sentinel"
+	"github.com/zoobz-io/dbml"
+	"github.com/zoobz-io/sentinel"
 )
 
 // buildDBMLFromStruct creates a DBML project from a struct's Sentinel metadata.

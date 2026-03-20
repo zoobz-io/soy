@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zoobzio/atom"
-	"github.com/zoobzio/sentinel"
+	"github.com/zoobz-io/atom"
+	"github.com/zoobz-io/sentinel"
 )
 
 // mockColScanner implements ColScanner for testing.

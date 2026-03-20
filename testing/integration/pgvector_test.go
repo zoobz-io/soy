@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	astqlpg "github.com/zoobzio/astql/postgres"
-	"github.com/zoobzio/soy"
+	astqlpg "github.com/zoobz-io/astql/postgres"
+	"github.com/zoobz-io/soy"
 )
 
 func TestPgvector_Integration(t *testing.T) {
