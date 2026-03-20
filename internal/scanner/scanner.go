@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zoobzio/atom"
-	"github.com/zoobzio/sentinel"
+	"github.com/zoobz-io/atom"
+	"github.com/zoobz-io/sentinel"
 )
 
 // ColScanner is the interface for database row scanning.

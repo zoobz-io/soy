@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/zoobzio/astql"
-	"github.com/zoobzio/atom"
-	"github.com/zoobzio/capitan"
-	"github.com/zoobzio/sentinel"
-	"github.com/zoobzio/soy/internal/scanner"
+	"github.com/zoobz-io/astql"
+	"github.com/zoobz-io/atom"
+	"github.com/zoobz-io/capitan"
+	"github.com/zoobz-io/sentinel"
+	"github.com/zoobz-io/soy/internal/scanner"
 )
 
 // soyExecutor provides the interface for executing queries.

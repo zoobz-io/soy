@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/zoobzio/atom"
-	"github.com/zoobzio/capitan"
-	"github.com/zoobzio/soy/internal/scanner"
+	"github.com/zoobz-io/atom"
+	"github.com/zoobz-io/capitan"
+	"github.com/zoobz-io/soy/internal/scanner"
 )
 
 // execMultipleRows is a shared helper for executing queries that return multiple rows.

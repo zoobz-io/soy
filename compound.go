@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/zoobzio/astql"
+	"github.com/zoobz-io/astql"
 )
 
 // Compound provides a focused API for building compound queries with set operations

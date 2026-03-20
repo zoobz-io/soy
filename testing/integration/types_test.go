@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zoobzio/astql/postgres"
-	"github.com/zoobzio/soy"
+	"github.com/zoobz-io/astql/postgres"
+	"github.com/zoobz-io/soy"
 )
 
 func TestTypeCoverage_Integration(t *testing.T) {

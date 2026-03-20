@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/zoobzio/astql/postgres"
-	"github.com/zoobzio/soy"
+	"github.com/zoobz-io/astql/postgres"
+	"github.com/zoobz-io/soy"
 )
 
 func TestTransactionEdgeCases_Integration(t *testing.T) {

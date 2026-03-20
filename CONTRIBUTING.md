@@ -180,9 +180,9 @@ Every PR automatically shows the next version that will be created:
 
 Soy builds on:
 - [sqlx](https://github.com/jmoiron/sqlx) - Database operations
-- [Sentinel](https://github.com/zoobzio/sentinel) - Type metadata extraction
-- [ASTQL](https://github.com/zoobzio/astql) - SQL validation
-- [DBML](https://github.com/zoobzio/dbml) - Schema representation
+- [Sentinel](https://github.com/zoobz-io/sentinel) - Type metadata extraction
+- [ASTQL](https://github.com/zoobz-io/astql) - SQL validation
+- [DBML](https://github.com/zoobz-io/dbml) - Schema representation
 
 When contributing, respect the boundaries between these layers.
 

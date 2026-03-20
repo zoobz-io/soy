@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/zoobzio/astql/postgres"
-	"github.com/zoobzio/sentinel"
+	"github.com/zoobz-io/astql/postgres"
+	"github.com/zoobz-io/sentinel"
 )
 
 type selectTestUser struct {

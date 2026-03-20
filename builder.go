@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/zoobzio/astql"
+	"github.com/zoobz-io/astql"
 )
 
 // operatorMap translates string operators to ASTQL operators.

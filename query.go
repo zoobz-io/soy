@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/zoobzio/astql"
-	"github.com/zoobzio/atom"
+	"github.com/zoobz-io/astql"
+	"github.com/zoobz-io/atom"
 )
 
 // Query provides a focused API for building SELECT queries that return multiple records.
