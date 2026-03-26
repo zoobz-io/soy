@@ -935,3 +935,80 @@ func TestExec_Batch(t *testing.T) {
 		}
 	})
 }
+
+// TestNilDB_ExecTx_WithValidTx tests that a nil-db Soy instance can execute
+// queries through ExecTx when given a valid transaction.
+func TestNilDB_ExecTx_WithValidTx(t *testing.T) {
+	db := getTestDB(t)
+
+	// Create a nil-db Soy instance — no live connection
+	nilSoy, err := soy.New[TestUser](nil, "test_users", postgres.New())
+	if err != nil {
+		t.Fatalf("New(nil) failed: %v", err)
+	}
+
+	ctx := context.Background()
+
+	t.Run("Create.ExecTx with nil-db Soy and valid tx", func(t *testing.T) {
+		truncateTestTable(t, db)
+
+		tx, err := db.BeginTxx(ctx, nil)
+		if err != nil {
+			t.Fatalf("BeginTxx() failed: %v", err)
+		}
+		defer tx.Rollback()
+
+		inserted, err := nilSoy.Insert().ExecTx(ctx, tx, &TestUser{
+			Email: "nildb@example.com",
+			Name:  "NilDB User",
+			Age:   intPtr(30),
+		})
+		if err != nil {
+			t.Fatalf("ExecTx() failed: %v", err)
+		}
+		if inserted.Email != "nildb@example.com" {
+			t.Errorf("expected email nildb@example.com, got %s", inserted.Email)
+		}
+		tx.Commit()
+	})
+
+	t.Run("Select.ExecTx with nil-db Soy and valid tx", func(t *testing.T) {
+		tx, err := db.BeginTxx(ctx, nil)
+		if err != nil {
+			t.Fatalf("BeginTxx() failed: %v", err)
+		}
+		defer tx.Rollback()
+
+		user, err := nilSoy.Select().Where("email", "=", "email").ExecTx(ctx, tx, map[string]any{
+			"email": "nildb@example.com",
+		})
+		if err != nil {
+			t.Fatalf("ExecTx() failed: %v", err)
+		}
+		if user.Name != "NilDB User" {
+			t.Errorf("expected name NilDB User, got %s", user.Name)
+		}
+	})
+
+	t.Run("Update.ExecTx with nil-db Soy and valid tx", func(t *testing.T) {
+		tx, err := db.BeginTxx(ctx, nil)
+		if err != nil {
+			t.Fatalf("BeginTxx() failed: %v", err)
+		}
+		defer tx.Rollback()
+
+		updated, err := nilSoy.Modify().
+			Set("name", "new_name").
+			Where("email", "=", "email").
+			ExecTx(ctx, tx, map[string]any{
+				"new_name": "Updated NilDB User",
+				"email":    "nildb@example.com",
+			})
+		if err != nil {
+			t.Fatalf("ExecTx() failed: %v", err)
+		}
+		if updated.Name != "Updated NilDB User" {
+			t.Errorf("expected name Updated NilDB User, got %s", updated.Name)
+		}
+	})
+}
