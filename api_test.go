@@ -85,6 +85,186 @@ func TestNew_NilDB(t *testing.T) {
 	}
 }
 
+func TestNilDB_RenderWorks(t *testing.T) {
+	sentinel.Tag("db")
+	sentinel.Tag("type")
+	sentinel.Tag("constraints")
+
+	s, err := New[soyTestUser](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New(nil) error = %v", err)
+	}
+
+	t.Run("Select renders", func(t *testing.T) {
+		result, err := s.Select().Where("id", "=", "user_id").Render()
+		if err != nil {
+			t.Fatalf("Render() error = %v", err)
+		}
+		if result.SQL == "" {
+			t.Error("Render() returned empty SQL")
+		}
+	})
+
+	t.Run("Query renders", func(t *testing.T) {
+		result, err := s.Query().Where("id", "=", "user_id").Render()
+		if err != nil {
+			t.Fatalf("Render() error = %v", err)
+		}
+		if result.SQL == "" {
+			t.Error("Render() returned empty SQL")
+		}
+	})
+
+	t.Run("Insert renders", func(t *testing.T) {
+		result, err := s.Insert().Render()
+		if err != nil {
+			t.Fatalf("Render() error = %v", err)
+		}
+		if result.SQL == "" {
+			t.Error("Render() returned empty SQL")
+		}
+	})
+
+	t.Run("Modify renders", func(t *testing.T) {
+		result, err := s.Modify().Set("name", "new_name").Where("id", "=", "user_id").Render()
+		if err != nil {
+			t.Fatalf("Render() error = %v", err)
+		}
+		if result.SQL == "" {
+			t.Error("Render() returned empty SQL")
+		}
+	})
+
+	t.Run("Remove renders", func(t *testing.T) {
+		result, err := s.Remove().Where("id", "=", "user_id").Render()
+		if err != nil {
+			t.Fatalf("Render() error = %v", err)
+		}
+		if result.SQL == "" {
+			t.Error("Render() returned empty SQL")
+		}
+	})
+
+	t.Run("Count renders", func(t *testing.T) {
+		result, err := s.Count().Render()
+		if err != nil {
+			t.Fatalf("Render() error = %v", err)
+		}
+		if result.SQL == "" {
+			t.Error("Render() returned empty SQL")
+		}
+	})
+}
+
+func TestNilDB_ExecReturnsError(t *testing.T) {
+	sentinel.Tag("db")
+	sentinel.Tag("type")
+	sentinel.Tag("constraints")
+
+	s, err := New[soyTestUser](nil, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New(nil) error = %v", err)
+	}
+
+	ctx := context.Background()
+	params := map[string]any{"user_id": 1}
+
+	t.Run("Select.Exec", func(t *testing.T) {
+		_, err := s.Select().Where("id", "=", "user_id").Exec(ctx, params)
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+
+	t.Run("Select.ExecAtom", func(t *testing.T) {
+		_, err := s.Select().Where("id", "=", "user_id").ExecAtom(ctx, params)
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+
+	t.Run("Query.Exec", func(t *testing.T) {
+		_, err := s.Query().Where("id", "=", "user_id").Exec(ctx, params)
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+
+	t.Run("Query.ExecAtom", func(t *testing.T) {
+		_, err := s.Query().Where("id", "=", "user_id").ExecAtom(ctx, params)
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+
+	t.Run("Create.Exec", func(t *testing.T) {
+		record := &soyTestUser{Email: "test@test.com", Name: "Test"}
+		_, err := s.Insert().Exec(ctx, record)
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+
+	t.Run("Create.ExecAtom", func(t *testing.T) {
+		_, err := s.Insert().ExecAtom(ctx, map[string]any{"email": "test@test.com", "name": "Test"})
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+
+	t.Run("Create.ExecBatch", func(t *testing.T) {
+		records := []*soyTestUser{{Email: "a@test.com", Name: "A"}}
+		_, err := s.Insert().ExecBatch(ctx, records)
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+
+	t.Run("Update.Exec", func(t *testing.T) {
+		_, err := s.Modify().Set("name", "new_name").Where("id", "=", "user_id").Exec(ctx, params)
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+
+	t.Run("Update.ExecBatch", func(t *testing.T) {
+		_, err := s.Modify().Set("name", "new_name").Where("id", "=", "user_id").ExecBatch(ctx, []map[string]any{params})
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+
+	t.Run("Delete.Exec", func(t *testing.T) {
+		_, err := s.Remove().Where("id", "=", "user_id").Exec(ctx, params)
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+
+	t.Run("Delete.ExecBatch", func(t *testing.T) {
+		_, err := s.Remove().Where("id", "=", "user_id").ExecBatch(ctx, []map[string]any{params})
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+
+	t.Run("Aggregate.Exec", func(t *testing.T) {
+		_, err := s.Count().Exec(ctx, nil)
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+
+	t.Run("Compound.Exec", func(t *testing.T) {
+		_, err := s.Query().Where("id", "=", "user_id").
+			Union(s.Query().Where("id", "=", "user_id")).
+			Exec(ctx, params)
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+}
+
 func TestSoy_TableName(t *testing.T) {
 	sentinel.Tag("db")
 	sentinel.Tag("type")

@@ -378,6 +378,9 @@ func (ab *Aggregate[T]) WhereFields(leftField, operator, rightField string) *Agg
 //	    Where("status", "=", "status").
 //	    Exec(ctx, params)
 func (ab *Aggregate[T]) Exec(ctx context.Context, params map[string]any) (float64, error) {
+	if ab.agg.soy.execer() == nil {
+		return 0, ErrNilDatabase
+	}
 	return ab.agg.exec(ctx, ab.agg.soy.execer(), params)
 }
 

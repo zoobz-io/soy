@@ -1041,6 +1041,9 @@ func (sb *Select[T]) Instance() *astql.ASTQL {
 //	    Where("email", "=", "user_email").
 //	    Exec(ctx, map[string]any{"user_email": "test@example.com"})
 func (sb *Select[T]) Exec(ctx context.Context, params map[string]any) (*T, error) {
+	if sb.soy.execer() == nil {
+		return nil, ErrNilDatabase
+	}
 	return sb.exec(ctx, sb.soy.execer(), params)
 }
 
@@ -1069,6 +1072,9 @@ func (sb *Select[T]) ExecTx(ctx context.Context, tx *sqlx.Tx, params map[string]
 //	    Where("email", "=", "user_email").
 //	    ExecAtom(ctx, map[string]any{"user_email": "test@example.com"})
 func (sb *Select[T]) ExecAtom(ctx context.Context, params map[string]any) (*atom.Atom, error) {
+	if sb.soy.execer() == nil {
+		return nil, ErrNilDatabase
+	}
 	return sb.execAtom(ctx, sb.soy.execer(), params)
 }
 

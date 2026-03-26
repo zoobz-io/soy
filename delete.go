@@ -288,6 +288,9 @@ func (db *Delete[T]) buildCondition(cond Condition) (astql.ConditionItem, error)
 //	    Where("id", "=", "user_id").
 //	    Exec(ctx, params)
 func (db *Delete[T]) Exec(ctx context.Context, params map[string]any) (int64, error) {
+	if db.soy.execer() == nil {
+		return 0, ErrNilDatabase
+	}
 	return db.exec(ctx, db.soy.execer(), params)
 }
 
@@ -310,6 +313,9 @@ func (db *Delete[T]) ExecTx(ctx context.Context, tx *sqlx.Tx, params map[string]
 //	    Where("id", "=", "user_id").
 //	    ExecBatch(ctx, batchParams)
 func (db *Delete[T]) ExecBatch(ctx context.Context, batchParams []map[string]any) (int64, error) {
+	if db.soy.execer() == nil {
+		return 0, ErrNilDatabase
+	}
 	return db.execBatch(ctx, db.soy.execer(), batchParams)
 }
 

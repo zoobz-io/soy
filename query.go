@@ -1002,6 +1002,9 @@ func (qb *Query[T]) SelectMaxOver(field string) *QueryWindowBuilder[T] {
 //	    OrderBy("name", "ASC").
 //	    Exec(ctx, params)
 func (qb *Query[T]) Exec(ctx context.Context, params map[string]any) ([]*T, error) {
+	if qb.soy.execer() == nil {
+		return nil, ErrNilDatabase
+	}
 	return qb.exec(ctx, qb.soy.execer(), params)
 }
 
@@ -1029,6 +1032,9 @@ func (qb *Query[T]) ExecTx(ctx context.Context, tx *sqlx.Tx, params map[string]a
 //	    Where("age", ">=", "min_age").
 //	    ExecAtom(ctx, map[string]any{"min_age": 18})
 func (qb *Query[T]) ExecAtom(ctx context.Context, params map[string]any) ([]*atom.Atom, error) {
+	if qb.soy.execer() == nil {
+		return nil, ErrNilDatabase
+	}
 	return qb.execAtom(ctx, qb.soy.execer(), params)
 }
 
