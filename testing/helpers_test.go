@@ -2,9 +2,15 @@ package testing
 
 import (
 	"context"
+	"database/sql/driver"
 	"errors"
+	"io"
 	"reflect"
 	"testing"
+	"time"
+
+	"github.com/zoobz-io/astql/postgres"
+	"github.com/zoobz-io/soy"
 )
 
 type testModel struct {
@@ -662,38 +668,79 @@ func TestMockConn(t *testing.T) {
 }
 
 func TestMockStmt(t *testing.T) {
-	mock := NewMockDB(t)
-	stmt := &MockStmt{mock: mock, query: "SELECT * FROM users"}
-
 	t.Run("Close", func(t *testing.T) {
+		mock := NewMockDB(t)
+		stmt := &MockStmt{mock: mock, query: "SELECT * FROM users"}
 		if err := stmt.Close(); err != nil {
 			t.Errorf("Close() error: %v", err)
 		}
 	})
 
 	t.Run("NumInput", func(t *testing.T) {
+		mock := NewMockDB(t)
+		stmt := &MockStmt{mock: mock, query: "SELECT * FROM users"}
 		if stmt.NumInput() != -1 {
 			t.Errorf("NumInput() = %d, want -1", stmt.NumInput())
 		}
 	})
 
 	t.Run("Exec", func(t *testing.T) {
+		mock := NewMockDB(t)
+		mock.ExpectExec().WithResult(1, 42)
+		stmt := &MockStmt{mock: mock, query: "INSERT INTO users (name) VALUES ('test')"}
+
 		result, err := stmt.Exec(nil)
 		if err != nil {
 			t.Fatalf("Exec() error: %v", err)
 		}
 		if result == nil {
-			t.Fatal("Exec() returned nil")
+			t.Fatal("Exec() returned nil result")
+		}
+		affected, _ := result.RowsAffected()
+		if affected != 1 {
+			t.Errorf("RowsAffected() = %d, want 1", affected)
+		}
+		lastID, _ := result.LastInsertId()
+		if lastID != 42 {
+			t.Errorf("LastInsertId() = %d, want 42", lastID)
+		}
+	})
+
+	t.Run("Exec unexpected call", func(t *testing.T) {
+		mock := NewMockDB(t)
+		stmt := &MockStmt{mock: mock, query: "INSERT INTO users"}
+
+		_, err := stmt.Exec(nil)
+		if err == nil {
+			t.Error("Exec() should error on unexpected call")
 		}
 	})
 
 	t.Run("Query", func(t *testing.T) {
+		mock := NewMockDB(t)
+		mock.ExpectQuery().WithRows([]testModel{{ID: 1, Name: "Test", Email: "test@example.com"}})
+		stmt := &MockStmt{mock: mock, query: "SELECT * FROM users"}
+
 		rows, err := stmt.Query(nil)
 		if err != nil {
 			t.Fatalf("Query() error: %v", err)
 		}
 		if rows == nil {
 			t.Fatal("Query() returned nil")
+		}
+		cols := rows.Columns()
+		if len(cols) != 3 {
+			t.Errorf("expected 3 columns, got %d", len(cols))
+		}
+	})
+
+	t.Run("Query unexpected call", func(t *testing.T) {
+		mock := NewMockDB(t)
+		stmt := &MockStmt{mock: mock, query: "SELECT * FROM users"}
+
+		_, err := stmt.Query(nil)
+		if err == nil {
+			t.Error("Query() should error on unexpected call")
 		}
 	})
 }
@@ -739,9 +786,16 @@ func TestMockDriverResult(t *testing.T) {
 }
 
 func TestMockDriverRows(t *testing.T) {
-	rows := &MockDriverRows{}
-
 	t.Run("Columns", func(t *testing.T) {
+		rows := &MockDriverRows{columns: []string{"id", "name"}, index: -1}
+		cols := rows.Columns()
+		if len(cols) != 2 {
+			t.Errorf("Columns() length = %d, want 2", len(cols))
+		}
+	})
+
+	t.Run("empty Columns", func(t *testing.T) {
+		rows := &MockDriverRows{columns: []string{}, index: -1}
 		cols := rows.Columns()
 		if len(cols) != 0 {
 			t.Errorf("Columns() length = %d, want 0", len(cols))
@@ -749,6 +803,7 @@ func TestMockDriverRows(t *testing.T) {
 	})
 
 	t.Run("Close", func(t *testing.T) {
+		rows := &MockDriverRows{index: -1}
 		if err := rows.Close(); err != nil {
 			t.Errorf("Close() error: %v", err)
 		}
@@ -757,9 +812,40 @@ func TestMockDriverRows(t *testing.T) {
 		}
 	})
 
-	t.Run("Next", func(t *testing.T) {
-		if err := rows.Next(nil); err != nil {
-			t.Errorf("Next() error: %v", err)
+	t.Run("Next with data", func(t *testing.T) {
+		rows := &MockDriverRows{
+			columns: []string{"id", "name"},
+			data: [][]driver.Value{
+				{int64(1), "Alice"},
+				{int64(2), "Bob"},
+			},
+			index: -1,
+		}
+
+		dest := make([]driver.Value, 2)
+		if err := rows.Next(dest); err != nil {
+			t.Fatalf("first Next() error: %v", err)
+		}
+		if dest[0].(int64) != 1 {
+			t.Errorf("first row id = %v, want 1", dest[0])
+		}
+
+		if err := rows.Next(dest); err != nil {
+			t.Fatalf("second Next() error: %v", err)
+		}
+		if dest[1].(string) != "Bob" {
+			t.Errorf("second row name = %v, want Bob", dest[1])
+		}
+
+		if err := rows.Next(dest); err != io.EOF {
+			t.Errorf("third Next() should return io.EOF, got %v", err)
+		}
+	})
+
+	t.Run("Next empty", func(t *testing.T) {
+		rows := &MockDriverRows{columns: []string{}, index: -1}
+		if err := rows.Next(nil); err != io.EOF {
+			t.Errorf("Next() on empty rows should return io.EOF, got %v", err)
 		}
 	})
 }
@@ -834,6 +920,230 @@ func TestMockRows_EdgeCases(t *testing.T) {
 
 		if rows.Next() {
 			t.Error("Next() with error should return false")
+		}
+	})
+}
+
+// soyTestModel is used for end-to-end tests with soy.New[T].
+type soyTestModel struct {
+	ID    int    `db:"id" type:"integer" constraints:"primarykey"`
+	Name  string `db:"name" type:"varchar(255)"`
+	Email string `db:"email" type:"varchar(255)"`
+}
+
+func TestMockDB_DB(t *testing.T) {
+	mock := NewMockDB(t)
+	db := mock.DB()
+	if db == nil {
+		t.Fatal("DB() returned nil")
+	}
+}
+
+func TestMockDB_EndToEnd_Query(t *testing.T) {
+	mock := NewMockDB(t)
+	mock.ExpectQuery().WithRows([]soyTestModel{
+		{ID: 1, Name: "Alice", Email: "alice@example.com"},
+		{ID: 2, Name: "Bob", Email: "bob@example.com"},
+	})
+
+	s, err := soy.New[soyTestModel](mock.DB(), "users", postgres.New())
+	if err != nil {
+		t.Fatalf("soy.New() error: %v", err)
+	}
+
+	results, err := s.Query().Exec(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Query().Exec() error: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	if results[0].ID != 1 || results[0].Name != "Alice" {
+		t.Errorf("first result = %+v, want {ID:1, Name:Alice}", results[0])
+	}
+	if results[1].ID != 2 || results[1].Name != "Bob" {
+		t.Errorf("second result = %+v, want {ID:2, Name:Bob}", results[1])
+	}
+
+	mock.AssertExpectations()
+}
+
+func TestMockDB_EndToEnd_Select(t *testing.T) {
+	mock := NewMockDB(t)
+	mock.ExpectQuery().WithRows([]soyTestModel{
+		{ID: 1, Name: "Alice", Email: "alice@example.com"},
+	})
+
+	s, err := soy.New[soyTestModel](mock.DB(), "users", postgres.New())
+	if err != nil {
+		t.Fatalf("soy.New() error: %v", err)
+	}
+
+	result, err := s.Select().Where("id", "=", "id").Exec(context.Background(), map[string]any{"id": 1})
+	if err != nil {
+		t.Fatalf("Select().Exec() error: %v", err)
+	}
+
+	if result.ID != 1 || result.Name != "Alice" {
+		t.Errorf("result = %+v, want {ID:1, Name:Alice}", result)
+	}
+
+	mock.AssertExpectations()
+}
+
+func TestMockDB_EndToEnd_Delete(t *testing.T) {
+	mock := NewMockDB(t)
+	mock.ExpectExec().WithResult(1, 0)
+
+	s, err := soy.New[soyTestModel](mock.DB(), "users", postgres.New())
+	if err != nil {
+		t.Fatalf("soy.New() error: %v", err)
+	}
+
+	affected, err := s.Remove().Where("id", "=", "id").Exec(context.Background(), map[string]any{"id": 1})
+	if err != nil {
+		t.Fatalf("Delete().Exec() error: %v", err)
+	}
+
+	if affected != 1 {
+		t.Errorf("affected = %d, want 1", affected)
+	}
+
+	mock.AssertExpectations()
+}
+
+func TestMockDB_EndToEnd_Error(t *testing.T) {
+	expectedErr := errors.New("connection refused")
+	mock := NewMockDB(t)
+	mock.ExpectQuery().WithError(expectedErr)
+
+	s, err := soy.New[soyTestModel](mock.DB(), "users", postgres.New())
+	if err != nil {
+		t.Fatalf("soy.New() error: %v", err)
+	}
+
+	_, err = s.Query().Exec(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	mock.AssertExpectations()
+}
+
+func TestBuildDriverRows(t *testing.T) {
+	t.Run("nil data", func(t *testing.T) {
+		rows := buildDriverRows(nil)
+		if len(rows.columns) != 0 {
+			t.Errorf("expected 0 columns, got %d", len(rows.columns))
+		}
+		if err := rows.Next(nil); err != io.EOF {
+			t.Errorf("Next() should return io.EOF, got %v", err)
+		}
+	})
+
+	t.Run("struct slice", func(t *testing.T) {
+		data := []testModel{
+			{ID: 1, Name: "Alice", Email: "alice@example.com"},
+			{ID: 2, Name: "Bob", Email: "bob@example.com"},
+		}
+		rows := buildDriverRows(data)
+
+		if len(rows.columns) != 3 {
+			t.Fatalf("expected 3 columns, got %d", len(rows.columns))
+		}
+		if rows.columns[0] != "id" || rows.columns[1] != "name" || rows.columns[2] != "email" {
+			t.Errorf("columns = %v, want [id name email]", rows.columns)
+		}
+		if len(rows.data) != 2 {
+			t.Fatalf("expected 2 rows, got %d", len(rows.data))
+		}
+	})
+
+	t.Run("pointer slice", func(t *testing.T) {
+		data := []*testModel{
+			{ID: 1, Name: "Alice"},
+		}
+		rows := buildDriverRows(data)
+		if len(rows.data) != 1 {
+			t.Fatalf("expected 1 row, got %d", len(rows.data))
+		}
+	})
+
+	t.Run("skips db dash tag", func(t *testing.T) {
+		type modelWithSkip struct {
+			ID       int    `db:"id"`
+			Internal string `db:"-"`
+			Name     string `db:"name"`
+		}
+		data := []modelWithSkip{{ID: 1, Internal: "skip", Name: "Alice"}}
+		rows := buildDriverRows(data)
+
+		if len(rows.columns) != 2 {
+			t.Fatalf("expected 2 columns (skipping db:\"-\"), got %d", len(rows.columns))
+		}
+		if len(rows.data[0]) != 2 {
+			t.Fatalf("expected 2 values per row, got %d", len(rows.data[0]))
+		}
+	})
+}
+
+func TestToDriverValue(t *testing.T) {
+	t.Run("int types coerce to int64", func(t *testing.T) {
+		val := toDriverValue(reflect.ValueOf(42))
+		if v, ok := val.(int64); !ok || v != 42 {
+			t.Errorf("int -> driver.Value = %v (%T), want int64(42)", val, val)
+		}
+
+		val = toDriverValue(reflect.ValueOf(int32(7)))
+		if v, ok := val.(int64); !ok || v != 7 {
+			t.Errorf("int32 -> driver.Value = %v (%T), want int64(7)", val, val)
+		}
+	})
+
+	t.Run("uint types coerce to int64", func(t *testing.T) {
+		val := toDriverValue(reflect.ValueOf(uint(10)))
+		if v, ok := val.(int64); !ok || v != 10 {
+			t.Errorf("uint -> driver.Value = %v (%T), want int64(10)", val, val)
+		}
+	})
+
+	t.Run("float32 coerces to float64", func(t *testing.T) {
+		val := toDriverValue(reflect.ValueOf(float32(3.14)))
+		if _, ok := val.(float64); !ok {
+			t.Errorf("float32 -> driver.Value = %T, want float64", val)
+		}
+	})
+
+	t.Run("direct types pass through", func(t *testing.T) {
+		if v := toDriverValue(reflect.ValueOf("hello")); v != "hello" {
+			t.Errorf("string = %v, want hello", v)
+		}
+		if v := toDriverValue(reflect.ValueOf(true)); v != true {
+			t.Errorf("bool = %v, want true", v)
+		}
+		if v := toDriverValue(reflect.ValueOf(int64(99))); v != int64(99) {
+			t.Errorf("int64 = %v, want 99", v)
+		}
+		now := time.Now()
+		if v := toDriverValue(reflect.ValueOf(now)); v != now {
+			t.Errorf("time.Time = %v, want %v", v, now)
+		}
+	})
+
+	t.Run("nil pointer returns nil", func(t *testing.T) {
+		var p *int
+		val := toDriverValue(reflect.ValueOf(p))
+		if val != nil {
+			t.Errorf("nil pointer = %v, want nil", val)
+		}
+	})
+
+	t.Run("non-nil pointer unwraps", func(t *testing.T) {
+		n := 42
+		val := toDriverValue(reflect.ValueOf(&n))
+		if v, ok := val.(int64); !ok || v != 42 {
+			t.Errorf("*int -> driver.Value = %v (%T), want int64(42)", val, val)
 		}
 	})
 }
