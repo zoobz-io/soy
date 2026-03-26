@@ -77,6 +77,9 @@ func (cb *Create[T]) OnConflict(columns ...string) *Conflict[T] {
 //	user := &User{Email: "test@example.com", Name: "Test"}
 //	inserted, err := soy.Insert().Exec(ctx, user)
 func (cb *Create[T]) Exec(ctx context.Context, record *T) (*T, error) {
+	if cb.soy.execer() == nil {
+		return nil, ErrNilDatabase
+	}
 	return cb.exec(ctx, cb.soy.execer(), record)
 }
 
@@ -92,6 +95,9 @@ func (cb *Create[T]) ExecTx(ctx context.Context, tx *sqlx.Tx, record *T) (*T, er
 //
 //	atom, err := soy.Insert().ExecAtom(ctx, map[string]any{"email": "test@example.com", "name": "Test"})
 func (cb *Create[T]) ExecAtom(ctx context.Context, params map[string]any) (*atom.Atom, error) {
+	if cb.soy.execer() == nil {
+		return nil, ErrNilDatabase
+	}
 	return cb.execAtom(ctx, cb.soy.execer(), params)
 }
 
@@ -133,6 +139,9 @@ func (cb *Create[T]) execAtom(ctx context.Context, execer sqlx.ExtContext, param
 //	}
 //	count, err := soy.Insert().ExecBatch(ctx, users)
 func (cb *Create[T]) ExecBatch(ctx context.Context, records []*T) (int64, error) {
+	if cb.soy.execer() == nil {
+		return 0, ErrNilDatabase
+	}
 	return cb.execBatch(ctx, cb.soy.execer(), records)
 }
 

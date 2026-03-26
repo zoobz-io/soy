@@ -17,6 +17,13 @@ var (
 	ErrNilRenderer = errors.New("soy: renderer cannot be nil")
 )
 
+// Execution errors.
+var (
+	// ErrNilDatabase is returned when a query is executed without a database connection.
+	// Use Render() for query-only mode.
+	ErrNilDatabase = errors.New("soy: cannot execute query: no database connection (use Render() for query-only mode)")
+)
+
 // Data errors.
 var (
 	// ErrNotFound is returned when a query expects at least one row but finds none.

@@ -3,6 +3,7 @@ package scanner
 import (
 	"database/sql"
 	"errors"
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -1171,5 +1172,27 @@ func TestNew_SkipsEmptyDBTag(t *testing.T) {
 	}
 	if _, ok := s.byColumn["id"]; !ok {
 		t.Error("expected plan for 'id' column")
+	}
+}
+
+func TestSafeInt64ToUint64(t *testing.T) {
+	tests := []struct {
+		name string
+		in   int64
+		want uint64
+	}{
+		{"negative clamps to zero", -1, 0},
+		{"zero stays zero", 0, 0},
+		{"positive converts", 42, 42},
+		{"max int64 converts", math.MaxInt64, uint64(math.MaxInt64)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := safeInt64ToUint64(tt.in)
+			if got != tt.want {
+				t.Errorf("safeInt64ToUint64(%d) = %d, want %d", tt.in, got, tt.want)
+			}
+		})
 	}
 }

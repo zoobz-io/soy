@@ -238,6 +238,9 @@ func (cb *Compound[T]) MustRender() *astql.QueryResult {
 
 // Exec executes the compound query and returns all matching records.
 func (cb *Compound[T]) Exec(ctx context.Context, params map[string]any) ([]*T, error) {
+	if cb.soy.execer() == nil {
+		return nil, ErrNilDatabase
+	}
 	return cb.exec(ctx, cb.soy.execer(), params)
 }
 

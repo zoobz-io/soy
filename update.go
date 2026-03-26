@@ -303,6 +303,9 @@ func (ub *Update[T]) buildCondition(cond Condition) (astql.ConditionItem, error)
 //	    Where("id", "=", "user_id").
 //	    Exec(ctx, params)
 func (ub *Update[T]) Exec(ctx context.Context, params map[string]any) (*T, error) {
+	if ub.soy.execer() == nil {
+		return nil, ErrNilDatabase
+	}
 	return ub.exec(ctx, ub.soy.execer(), params)
 }
 
@@ -326,6 +329,9 @@ func (ub *Update[T]) ExecTx(ctx context.Context, tx *sqlx.Tx, params map[string]
 //	    Where("id", "=", "user_id").
 //	    ExecBatch(ctx, batchParams)
 func (ub *Update[T]) ExecBatch(ctx context.Context, batchParams []map[string]any) (int64, error) {
+	if ub.soy.execer() == nil {
+		return 0, ErrNilDatabase
+	}
 	return ub.execBatch(ctx, ub.soy.execer(), batchParams)
 }
 

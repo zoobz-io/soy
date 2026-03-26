@@ -460,7 +460,7 @@ func assignValue(a *atom.Atom, plan *scanFieldPlan, dest any) {
 				a.UintPtrs = make(map[string]*uint64)
 			}
 			if v.Valid {
-				u := uint64(v.Int64) //nolint:gosec // database values assumed valid
+				u := safeInt64ToUint64(v.Int64)
 				a.UintPtrs[plan.fieldName] = &u
 			} else {
 				a.UintPtrs[plan.fieldName] = nil
@@ -516,4 +516,12 @@ func assignValue(a *atom.Atom, plan *scanFieldPlan, dest any) {
 			}
 		}
 	}
+}
+
+// safeInt64ToUint64 converts int64 to uint64, clamping negative values to 0.
+func safeInt64ToUint64(v int64) uint64 {
+	if v < 0 {
+		return 0
+	}
+	return uint64(v)
 }
