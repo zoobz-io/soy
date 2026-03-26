@@ -11,7 +11,7 @@
 //			WithRows([]MyModel{{ID: 1, Name: "Test"}}).
 //			Times(1)
 //
-//		soy, _ := soy.New[MyModel](mock.DB(), "my_table")
+//		soy, _ := soy.New[MyModel](mock.DB(), "my_table", postgres.New())
 //		results, err := soy.Query().Exec(ctx, nil)
 //
 //		require.NoError(t, err)
@@ -25,12 +25,20 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
+	"io"
+	"math"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 )
+
+// driverCounter ensures unique driver names for sql.Register across tests.
+var driverCounter atomic.Int64
 
 // MockDB provides a configurable mock implementation of sqlx database operations.
 // It tracks calls, allows configuring return values, and provides assertion methods.
@@ -84,6 +92,25 @@ func NewMockDB(t *testing.T) *MockDB {
 		expectations: make([]*Expectation, 0),
 		calls:        make([]MockCall, 0),
 	}
+}
+
+// DB returns a *sqlx.DB backed by the mock driver. Pass this to soy.New[T]()
+// to test Exec() paths without a real database connection.
+func (m *MockDB) DB() *sqlx.DB {
+	driverName := fmt.Sprintf("soymock_%d", driverCounter.Add(1))
+	sql.Register(driverName, &MockDriver{mock: m})
+	sqlx.BindDriver(driverName, sqlx.DOLLAR)
+
+	db, err := sqlx.Open(driverName, "mock")
+	if err != nil {
+		m.t.Fatalf("failed to open mock db: %v", err)
+	}
+
+	m.t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	return db
 }
 
 // ExpectQuery configures the mock to expect a query that returns rows.
@@ -594,21 +621,30 @@ func (*MockStmt) NumInput() int {
 // Exec executes the statement.
 func (s *MockStmt) Exec(args []driver.Value) (driver.Result, error) {
 	s.mock.RecordCall(s.query, args)
-	exp := s.mock.CurrentExpectation()
-	if exp != nil && exp.err != nil {
+	exp := s.mock.NextExpectation()
+	if exp == nil {
+		return nil, errors.New("unexpected exec call")
+	}
+	if exp.err != nil {
 		return nil, exp.err
 	}
-	return MockDriverResult{}, nil
+	return MockDriverResult{
+		lastID:   exp.lastInsertID,
+		affected: exp.rowsAffected,
+	}, nil
 }
 
 // Query executes a query.
 func (s *MockStmt) Query(args []driver.Value) (driver.Rows, error) {
 	s.mock.RecordCall(s.query, args)
-	exp := s.mock.CurrentExpectation()
-	if exp != nil && exp.err != nil {
+	exp := s.mock.NextExpectation()
+	if exp == nil {
+		return nil, errors.New("unexpected query call")
+	}
+	if exp.err != nil {
 		return nil, exp.err
 	}
-	return &MockDriverRows{}, nil
+	return buildDriverRows(exp.rows), nil
 }
 
 // MockDriverTx implements driver.Tx.
@@ -636,14 +672,17 @@ func (r MockDriverResult) RowsAffected() (int64, error) {
 	return r.affected, nil
 }
 
-// MockDriverRows implements driver.Rows.
+// MockDriverRows implements driver.Rows backed by expectation data.
 type MockDriverRows struct {
-	closed bool
+	columns []string
+	data    [][]driver.Value
+	index   int
+	closed  bool
 }
 
 // Columns returns column names.
-func (*MockDriverRows) Columns() []string {
-	return []string{}
+func (r *MockDriverRows) Columns() []string {
+	return r.columns
 }
 
 // Close closes the rows.
@@ -652,7 +691,127 @@ func (r *MockDriverRows) Close() error {
 	return nil
 }
 
-// Next advances to the next row.
-func (*MockDriverRows) Next(_ []driver.Value) error {
+// Next populates dest with the next row's values or returns io.EOF when exhausted.
+func (r *MockDriverRows) Next(dest []driver.Value) error {
+	r.index++
+	if r.index >= len(r.data) {
+		return io.EOF
+	}
+	copy(dest, r.data[r.index])
 	return nil
+}
+
+// buildDriverRows converts a slice of structs (from WithRows) into MockDriverRows
+// that satisfies the database/sql/driver.Rows interface.
+func buildDriverRows(data any) *MockDriverRows {
+	if data == nil {
+		return &MockDriverRows{columns: []string{}, index: -1}
+	}
+
+	v := reflect.ValueOf(data)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Slice {
+		return &MockDriverRows{columns: []string{}, index: -1}
+	}
+
+	var columns []string
+	var rows [][]driver.Value
+
+	if v.Len() > 0 {
+		elem := v.Index(0)
+		if elem.Kind() == reflect.Ptr {
+			elem = elem.Elem()
+		}
+		t := elem.Type()
+
+		for i := 0; i < t.NumField(); i++ {
+			field := t.Field(i)
+			dbTag := field.Tag.Get("db")
+			if dbTag == "-" {
+				continue
+			}
+			if dbTag != "" {
+				columns = append(columns, dbTag)
+			} else {
+				columns = append(columns, field.Name)
+			}
+		}
+
+		for i := 0; i < v.Len(); i++ {
+			row := v.Index(i)
+			if row.Kind() == reflect.Ptr {
+				row = row.Elem()
+			}
+			vals := make([]driver.Value, 0, len(columns))
+			for j := 0; j < t.NumField(); j++ {
+				if tag := t.Field(j).Tag.Get("db"); tag == "-" {
+					continue
+				}
+				vals = append(vals, toDriverValue(row.Field(j)))
+			}
+			rows = append(rows, vals)
+		}
+	}
+
+	return &MockDriverRows{
+		columns: columns,
+		data:    rows,
+		index:   -1,
+	}
+}
+
+// toDriverValue converts a reflect.Value to a driver.Value-compatible type.
+// The database/sql/driver package requires values to be one of:
+// nil, int64, float64, bool, []byte, string, or time.Time.
+func toDriverValue(v reflect.Value) driver.Value {
+	if !v.IsValid() {
+		return nil
+	}
+
+	iface := v.Interface()
+
+	// Handle pointer types — unwrap or return nil.
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return nil
+		}
+		return toDriverValue(v.Elem())
+	}
+
+	// Direct matches for driver.Value types.
+	switch val := iface.(type) {
+	case nil:
+		return nil
+	case int64:
+		return val
+	case float64:
+		return val
+	case bool:
+		return val
+	case []byte:
+		return val
+	case string:
+		return val
+	case time.Time:
+		return val
+	}
+
+	// Coerce numeric types to int64 or float64.
+	switch v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32:
+		return v.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		u := v.Uint()
+		if u > uint64(math.MaxInt64) {
+			return int64(math.MaxInt64)
+		}
+		return int64(u) // #nosec G115 -- clamped above
+	case reflect.Float32:
+		return v.Float()
+	}
+
+	// Fallback: return as-is and let database/sql handle it.
+	return iface
 }
