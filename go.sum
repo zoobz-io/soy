@@ -16,8 +16,8 @@ github.com/mattn/go-sqlite3 v1.14.22 h1:2gZY6PC6kBnID23Tichd1K+Z0oS6nE/XwU+Vz/5o
 github.com/mattn/go-sqlite3 v1.14.22/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
-github.com/zoobz-io/astql v1.0.7 h1:Icqr8UvS8SFJS/LnN12Ozr5ilCv5+hJyEpodGKUIDz8=
-github.com/zoobz-io/astql v1.0.7/go.mod h1:WJtob66m/1gicFkXUkMhD12UvOpDBGROu28AA+OQ9Eo=
+github.com/zoobz-io/astql v1.0.11 h1:L16FqYL+5p3SA+73radNvMxf7MWhCRyb1Pg7cXqiltM=
+github.com/zoobz-io/astql v1.0.11/go.mod h1:WJtob66m/1gicFkXUkMhD12UvOpDBGROu28AA+OQ9Eo=
 github.com/zoobz-io/atom v1.0.1 h1:vG2A/xylCQTBg1a8ntz8wUz4A9v8JvX3t/s7lmtyJCI=
 github.com/zoobz-io/atom v1.0.1/go.mod h1:+/Pu6dYAHVq3hrDt3SOKxdgTmeV66ooKVKnhtVR/ztM=
 github.com/zoobz-io/capitan v1.0.2 h1:/NKAgntWeRIN4S0oaZJNk6qaYuDN/Gw68+81kLbkLrc=

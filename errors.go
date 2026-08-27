@@ -24,6 +24,12 @@ var (
 	ErrNilDatabase = errors.New("soy: cannot execute query: no database connection (use Render() for query-only mode)")
 )
 
+// Subquery errors.
+var (
+	// ErrNilSubquery is returned when a nil subquery is passed to a subquery WHERE method.
+	ErrNilSubquery = errors.New("soy: subquery cannot be nil")
+)
+
 // Data errors.
 var (
 	// ErrNotFound is returned when a query expects at least one row but finds none.
@@ -103,6 +109,10 @@ var (
 
 	// ErrInvalidAggregateFunc is returned when an aggregate function is not supported.
 	ErrInvalidAggregateFunc = &ValidationError{Kind: "aggregate function"}
+
+	// ErrInvalidSubquery is returned when a subquery cannot be constructed
+	// (for example, because the subquery builder itself failed to build).
+	ErrInvalidSubquery = &ValidationError{Kind: "subquery"}
 )
 
 // newFieldError creates a ValidationError for an invalid field.
@@ -150,6 +160,11 @@ func newTableError(name string, err error) error {
 // newConditionError creates a ValidationError for an invalid condition.
 func newConditionError(err error) error {
 	return &ValidationError{Kind: "condition", Err: err}
+}
+
+// newSubqueryError creates a ValidationError for an invalid subquery.
+func newSubqueryError(err error) error {
+	return &ValidationError{Kind: "subquery", Err: err}
 }
 
 // newAggregateFuncError creates a ValidationError for an invalid aggregate function.

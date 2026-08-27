@@ -206,6 +206,76 @@ func (w *whereBuilder) addWhereNotBetweenWithCondition(field, lowParam, highPara
 	return w.builder.Where(condition), condition, nil
 }
 
+// Subquery is implemented by soy query builders that can serve as the right-hand
+// side of a subquery WHERE condition (WhereInSubquery, WhereExists, and friends).
+// Both *Query[T] and *Select[T] satisfy it, for any row type T — the subquery's row
+// type is independent of the outer query, so cross-table subqueries work
+// (e.g. WHERE user_id IN (SELECT id FROM users ...)).
+//
+// The interface method is unexported, so only soy's own builders can act as
+// subqueries; callers construct one with soy.Query()/soy.Select().
+//
+// Parameter naming: the renderer prefixes a subquery's parameters with sq<depth>_
+// to keep them distinct from the outer query's parameters. A subquery param named
+// "batch" is rendered as :sq1_batch, so the Exec param map must use the prefixed
+// key. The authoritative list of expected keys is QueryResult.RequiredParams from
+// Render() — read it if you are unsure what a nested query expects.
+type Subquery interface {
+	// subqueryBuilder returns the underlying astql builder to embed, or the
+	// subquery's accumulated build error.
+	subqueryBuilder() (*astql.Builder, error)
+}
+
+// resolveSubquery extracts and validates the underlying astql builder from a
+// Subquery. It returns an error rather than letting astql.Sub panic when the
+// subquery fails to build: Build() is idempotent and side-effect-free, so
+// pre-validating here guarantees the later astql.Sub call cannot panic.
+func resolveSubquery(sub Subquery) (*astql.Builder, error) {
+	if sub == nil {
+		return nil, ErrNilSubquery
+	}
+	subBuilder, err := sub.subqueryBuilder()
+	if err != nil {
+		return nil, err
+	}
+	if subBuilder == nil {
+		return nil, ErrNilSubquery
+	}
+	if _, err := subBuilder.Build(); err != nil {
+		return nil, newSubqueryError(err)
+	}
+	return subBuilder, nil
+}
+
+// addWhereInSubquery adds a WHERE field IN/NOT IN (subquery) condition.
+// op must be astql.IN or astql.NotIn.
+func (w *whereBuilder) addWhereInSubquery(field string, op astql.Operator, sub Subquery) (*astql.Builder, astql.ConditionItem, error) {
+	subBuilder, err := resolveSubquery(sub)
+	if err != nil {
+		return w.builder, nil, err
+	}
+
+	f, err := w.instance.TryF(field)
+	if err != nil {
+		return w.builder, nil, newFieldError(field, err)
+	}
+
+	condition := astql.CSub(f, op, astql.Sub(subBuilder))
+	return w.builder.Where(condition), condition, nil
+}
+
+// addWhereExists adds a WHERE EXISTS/NOT EXISTS (subquery) condition.
+// op must be astql.EXISTS or astql.NotExists.
+func (w *whereBuilder) addWhereExists(op astql.Operator, sub Subquery) (*astql.Builder, astql.ConditionItem, error) {
+	subBuilder, err := resolveSubquery(sub)
+	if err != nil {
+		return w.builder, nil, err
+	}
+
+	condition := astql.CSubExists(op, astql.Sub(subBuilder))
+	return w.builder.Where(condition), condition, nil
+}
+
 // buildCondition converts a Condition to an ASTQL condition.
 func (w *whereBuilder) buildCondition(cond Condition) (astql.ConditionItem, error) {
 	return buildConditionWithInstance(w.instance, cond)

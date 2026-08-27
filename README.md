@@ -172,6 +172,7 @@ Three packages, one type definition, complete safety from struct tags to SQL exe
 - **Cookbook**
   - [Pagination](docs/4.cookbook/1.pagination.md) — LIMIT/OFFSET patterns
   - [Vector Search](docs/4.cookbook/2.pgvector.md) — pgvector similarity queries
+  - [Work-Queue Claim](docs/4.cookbook/3.work-queue.md) — FOR UPDATE SKIP LOCKED + subquery conditions
 - **Reference**
   - [API](docs/5.reference/1.api.md) — complete function documentation
 

@@ -272,6 +272,56 @@ func (db *Delete[T]) WhereFields(leftField, operator, rightField string) *Delete
 	return db
 }
 
+// WhereInSubquery adds a WHERE field IN (subquery) condition, where the subquery
+// is another soy query builder (Query or Select). This satisfies the mandatory-WHERE
+// safety guard, so a DELETE keyed solely on a subquery is allowed.
+func (db *Delete[T]) WhereInSubquery(field string, sub Subquery) *Delete[T] {
+	return db.addSubqueryWhere(func(wb *whereBuilder) (*astql.Builder, astql.ConditionItem, error) {
+		return wb.addWhereInSubquery(field, astql.IN, sub)
+	})
+}
+
+// WhereNotInSubquery adds a WHERE field NOT IN (subquery) condition.
+func (db *Delete[T]) WhereNotInSubquery(field string, sub Subquery) *Delete[T] {
+	return db.addSubqueryWhere(func(wb *whereBuilder) (*astql.Builder, astql.ConditionItem, error) {
+		return wb.addWhereInSubquery(field, astql.NotIn, sub)
+	})
+}
+
+// WhereExists adds a WHERE EXISTS (subquery) condition.
+func (db *Delete[T]) WhereExists(sub Subquery) *Delete[T] {
+	return db.addSubqueryWhere(func(wb *whereBuilder) (*astql.Builder, astql.ConditionItem, error) {
+		return wb.addWhereExists(astql.EXISTS, sub)
+	})
+}
+
+// WhereNotExists adds a WHERE NOT EXISTS (subquery) condition.
+func (db *Delete[T]) WhereNotExists(sub Subquery) *Delete[T] {
+	return db.addSubqueryWhere(func(wb *whereBuilder) (*astql.Builder, astql.ConditionItem, error) {
+		return wb.addWhereExists(astql.NotExists, sub)
+	})
+}
+
+// addSubqueryWhere applies a subquery WHERE condition and threads the result
+// through the Delete builder's state (error, hasWhere) so the mandatory-WHERE
+// safety guard stays consistent.
+func (db *Delete[T]) addSubqueryWhere(add func(*whereBuilder) (*astql.Builder, astql.ConditionItem, error)) *Delete[T] {
+	if db.err != nil {
+		return db
+	}
+
+	wb := newWhereBuilder(db.instance, db.builder)
+	builder, _, err := add(wb)
+	if err != nil {
+		db.err = err
+		return db
+	}
+
+	db.builder = builder
+	db.hasWhere = true
+	return db
+}
+
 // buildCondition converts a Condition to an ASTQL condition.
 func (db *Delete[T]) buildCondition(cond Condition) (astql.ConditionItem, error) {
 	return buildConditionWithInstance(db.instance, cond)

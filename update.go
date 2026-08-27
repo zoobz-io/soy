@@ -281,6 +281,77 @@ func (ub *Update[T]) whereBetweenHelper(field, lowParam, highParam string, negat
 	return ub
 }
 
+// WhereInSubquery adds a WHERE field IN (subquery) condition, where the subquery
+// is another soy query builder (Query or Select). This satisfies the mandatory-WHERE
+// safety guard, so an UPDATE keyed solely on a subquery is allowed.
+//
+// This is the canonical concurrent work-queue / outbox claim:
+//
+//	pending := jobs.Query().Fields("id").
+//	    Where("status", "=", "pending_status").
+//	    OrderBy("created_at", "asc").
+//	    LimitParam("batch").
+//	    ForUpdate().SkipLocked()
+//	claimed, err := jobs.Modify().
+//	    Set("status", "processing_status").
+//	    WhereInSubquery("id", pending).
+//	    ExecMany(ctx, map[string]any{
+//	        "processing_status": "processing", // outer param, unprefixed
+//	        "sq1_pending_status": "pending",   // subquery params take the sq1_ prefix
+//	        "sq1_batch":          100,
+//	    })
+//
+// Use ExecMany (not Exec) for a batch claim — Exec errors when more than one row
+// is updated. Note the sq1_ prefix on the subquery's parameters — see the
+// Subquery type docs.
+func (ub *Update[T]) WhereInSubquery(field string, sub Subquery) *Update[T] {
+	return ub.addSubqueryWhere(func(wb *whereBuilder) (*astql.Builder, astql.ConditionItem, error) {
+		return wb.addWhereInSubquery(field, astql.IN, sub)
+	})
+}
+
+// WhereNotInSubquery adds a WHERE field NOT IN (subquery) condition.
+func (ub *Update[T]) WhereNotInSubquery(field string, sub Subquery) *Update[T] {
+	return ub.addSubqueryWhere(func(wb *whereBuilder) (*astql.Builder, astql.ConditionItem, error) {
+		return wb.addWhereInSubquery(field, astql.NotIn, sub)
+	})
+}
+
+// WhereExists adds a WHERE EXISTS (subquery) condition.
+func (ub *Update[T]) WhereExists(sub Subquery) *Update[T] {
+	return ub.addSubqueryWhere(func(wb *whereBuilder) (*astql.Builder, astql.ConditionItem, error) {
+		return wb.addWhereExists(astql.EXISTS, sub)
+	})
+}
+
+// WhereNotExists adds a WHERE NOT EXISTS (subquery) condition.
+func (ub *Update[T]) WhereNotExists(sub Subquery) *Update[T] {
+	return ub.addSubqueryWhere(func(wb *whereBuilder) (*astql.Builder, astql.ConditionItem, error) {
+		return wb.addWhereExists(astql.NotExists, sub)
+	})
+}
+
+// addSubqueryWhere applies a subquery WHERE condition and threads the result
+// through the Update builder's state (error, whereItems, hasWhere) so the
+// mandatory-WHERE safety guard and RETURNING fallback stay consistent.
+func (ub *Update[T]) addSubqueryWhere(add func(*whereBuilder) (*astql.Builder, astql.ConditionItem, error)) *Update[T] {
+	if ub.err != nil {
+		return ub
+	}
+
+	wb := newWhereBuilder(ub.instance, ub.builder)
+	builder, cond, err := add(wb)
+	if err != nil {
+		ub.err = err
+		return ub
+	}
+
+	ub.builder = builder
+	ub.whereItems = append(ub.whereItems, cond)
+	ub.hasWhere = true
+	return ub
+}
+
 // buildCondition converts a Condition to an ASTQL condition.
 func (ub *Update[T]) buildCondition(cond Condition) (astql.ConditionItem, error) {
 	return buildConditionWithInstance(ub.instance, cond)
@@ -312,6 +383,111 @@ func (ub *Update[T]) Exec(ctx context.Context, params map[string]any) (*T, error
 // ExecTx executes the UPDATE query within a transaction.
 func (ub *Update[T]) ExecTx(ctx context.Context, tx *sqlx.Tx, params map[string]any) (*T, error) {
 	return ub.exec(ctx, tx, params)
+}
+
+// ExecMany executes the UPDATE and returns every updated record.
+//
+// Unlike Exec — which requires the UPDATE to touch exactly one row and errors
+// otherwise — ExecMany is the correct choice for batch updates that affect an
+// arbitrary number of rows, such as a work-queue claim:
+//
+//	pending := jobs.Query().Fields("id").
+//	    Where("status", "=", "pending_status").
+//	    OrderBy("created_at", "asc").
+//	    LimitParam("batch").
+//	    ForUpdate().SkipLocked()
+//	claimed, err := jobs.Modify().
+//	    Set("status", "processing_status").
+//	    WhereInSubquery("id", pending).
+//	    ExecMany(ctx, params)  // []*Job — the whole claimed batch
+//
+// On dialects with RETURNING support for UPDATE (PostgreSQL, SQLite, SQL Server)
+// the returned slice is exactly the set of updated rows. On dialects without it
+// (MariaDB) soy falls back to re-SELECTing by the UPDATE's WHERE clause, so the
+// result is best-effort and may differ when the UPDATE mutates a column that the
+// WHERE clause filters on. Prefer a RETURNING dialect for claim-style workloads.
+func (ub *Update[T]) ExecMany(ctx context.Context, params map[string]any) ([]*T, error) {
+	if ub.soy.execer() == nil {
+		return nil, ErrNilDatabase
+	}
+	return ub.execMany(ctx, ub.soy.execer(), params)
+}
+
+// ExecManyTx executes the multi-row UPDATE within a transaction and returns every
+// updated record. See ExecMany for semantics.
+func (ub *Update[T]) ExecManyTx(ctx context.Context, tx *sqlx.Tx, params map[string]any) ([]*T, error) {
+	return ub.execMany(ctx, tx, params)
+}
+
+// execMany is the internal multi-row execution method.
+func (ub *Update[T]) execMany(ctx context.Context, execer sqlx.ExtContext, params map[string]any) ([]*T, error) {
+	if ub.err != nil {
+		return nil, fmt.Errorf("update builder has errors: %w", ub.err)
+	}
+
+	// Safety check: require WHERE clause.
+	if !ub.hasWhere {
+		return nil, fmt.Errorf("UPDATE requires at least one WHERE condition to prevent accidental full-table update")
+	}
+
+	caps := ub.soy.renderer().Capabilities()
+	if caps.ReturningOnUpdate {
+		return ub.execManyWithReturning(ctx, execer, params)
+	}
+	return ub.execManyThenSelect(ctx, execer, params)
+}
+
+// execManyWithReturning executes UPDATE ... RETURNING and scans all updated rows.
+func (ub *Update[T]) execManyWithReturning(ctx context.Context, execer sqlx.ExtContext, params map[string]any) ([]*T, error) {
+	result, err := ub.builder.Render(ub.soy.renderer())
+	if err != nil {
+		return nil, newRenderError("UPDATE", err)
+	}
+
+	return execMultipleRows[T](ctx, execer, result.SQL, params, ub.soy.getTableName(), "UPDATE", func(ctx context.Context, record *T) error {
+		return ub.soy.callOnScan(ctx, record)
+	})
+}
+
+// execManyThenSelect executes UPDATE without RETURNING, then re-SELECTs the
+// affected rows (MariaDB fallback). See ExecMany for the accuracy caveat.
+func (ub *Update[T]) execManyThenSelect(ctx context.Context, execer sqlx.ExtContext, params map[string]any) ([]*T, error) {
+	result, err := ub.builder.Render(ub.soy.renderer())
+	if err != nil {
+		return nil, newRenderError("UPDATE", err)
+	}
+
+	tableName := ub.soy.getTableName()
+	capitan.Debug(ctx, QueryStarted,
+		TableKey.Field(tableName),
+		OperationKey.Field("UPDATE"),
+		SQLKey.Field(result.SQL),
+	)
+
+	res, err := sqlx.NamedExecContext(ctx, execer, result.SQL, params)
+	if err != nil {
+		return nil, newQueryError("UPDATE", err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if affected == 0 {
+		return nil, ErrNoRowsAffected
+	}
+
+	selectBuilder, err := ub.buildFallbackSelect()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build fallback SELECT: %w", err)
+	}
+	selectResult, err := selectBuilder.Render(ub.soy.renderer())
+	if err != nil {
+		return nil, fmt.Errorf("failed to render fallback SELECT: %w", err)
+	}
+
+	return execMultipleRows[T](ctx, execer, selectResult.SQL, params, tableName, "SELECT (UPDATE fallback)", func(ctx context.Context, record *T) error {
+		return ub.soy.callOnScan(ctx, record)
+	})
 }
 
 // ExecBatch executes the UPDATE query for multiple parameter sets.
