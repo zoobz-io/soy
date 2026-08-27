@@ -390,3 +390,29 @@ func TestAggregateFuncError(t *testing.T) {
 		}
 	})
 }
+
+func TestSubqueryErrors(t *testing.T) {
+	t.Run("newSubqueryError matches ErrInvalidSubquery", func(t *testing.T) {
+		err := newSubqueryError(errors.New("subquery failed to build"))
+		if !errors.Is(err, ErrInvalidSubquery) {
+			t.Error("expected newSubqueryError to match ErrInvalidSubquery")
+		}
+		if errors.Is(err, ErrInvalidField) {
+			t.Error("expected newSubqueryError NOT to match ErrInvalidField")
+		}
+	})
+
+	t.Run("newSubqueryError wraps underlying", func(t *testing.T) {
+		underlying := errors.New("root cause")
+		err := newSubqueryError(underlying)
+		if !errors.Is(err, underlying) {
+			t.Error("expected newSubqueryError to wrap underlying error")
+		}
+	})
+
+	t.Run("ErrNilSubquery identity", func(t *testing.T) {
+		if !errors.Is(ErrNilSubquery, ErrNilSubquery) {
+			t.Error("ErrNilSubquery should match itself")
+		}
+	})
+}

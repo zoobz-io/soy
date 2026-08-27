@@ -1,6 +1,8 @@
 package soy
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -925,6 +927,117 @@ func TestUpdate_DialectCapabilities(t *testing.T) {
 		mariaCaps := mariadb.New().Capabilities()
 		if mariaCaps.ReturningOnUpdate {
 			t.Error("MariaDB should NOT support ReturningOnUpdate")
+		}
+	})
+}
+
+func TestUpdate_SubqueryConditions(t *testing.T) {
+	sentinel.Tag("db")
+	sentinel.Tag("type")
+	sentinel.Tag("constraints")
+
+	db := &sqlx.DB{}
+	soy, err := New[updateTestUser](db, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	sub := func() *Query[updateTestUser] {
+		return soy.Query().Fields("id").Where("age", ">=", "min_age")
+	}
+
+	t.Run("WhereInSubquery renders and satisfies safety guard", func(t *testing.T) {
+		ub := soy.Modify().Set("name", "new_name").WhereInSubquery("id", sub())
+		if !ub.hasWhere {
+			t.Fatal("WhereInSubquery must satisfy the mandatory-WHERE safety guard")
+		}
+		result, err := ub.Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, `"id" IN (SELECT`) {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("WhereNotInSubquery", func(t *testing.T) {
+		result, err := soy.Modify().Set("name", "new_name").WhereNotInSubquery("id", sub()).Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, `"id" NOT IN (SELECT`) {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("WhereExists", func(t *testing.T) {
+		result, err := soy.Modify().Set("name", "new_name").WhereExists(sub()).Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, "EXISTS (SELECT") {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("WhereNotExists", func(t *testing.T) {
+		ub := soy.Modify().Set("name", "new_name").WhereNotExists(sub())
+		if !ub.hasWhere {
+			t.Fatal("WhereNotExists must satisfy the mandatory-WHERE safety guard")
+		}
+		result, err := ub.Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, "NOT EXISTS (SELECT") {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("nil subquery errors", func(t *testing.T) {
+		if _, err := soy.Modify().Set("name", "new_name").WhereInSubquery("id", nil).Render(); err == nil {
+			t.Error("expected error for nil subquery")
+		}
+	})
+}
+
+func TestUpdate_ExecMany_Guards(t *testing.T) {
+	sentinel.Tag("db")
+	sentinel.Tag("type")
+	sentinel.Tag("constraints")
+
+	ctx := context.Background()
+
+	t.Run("nil database returns ErrNilDatabase", func(t *testing.T) {
+		soy, err := New[updateTestUser](nil, "users", postgres.New())
+		if err != nil {
+			t.Fatalf("New() failed: %v", err)
+		}
+		_, err = soy.Modify().Set("name", "n").Where("id", "=", "user_id").ExecMany(ctx, nil)
+		if !errors.Is(err, ErrNilDatabase) {
+			t.Errorf("expected ErrNilDatabase, got %v", err)
+		}
+	})
+
+	t.Run("missing WHERE returns safety error", func(t *testing.T) {
+		db := &sqlx.DB{}
+		soy, err := New[updateTestUser](db, "users", postgres.New())
+		if err != nil {
+			t.Fatalf("New() failed: %v", err)
+		}
+		if _, err := soy.Modify().Set("name", "n").ExecMany(ctx, nil); err == nil {
+			t.Error("expected safety error for UPDATE without WHERE")
+		}
+	})
+
+	t.Run("builder error propagates", func(t *testing.T) {
+		db := &sqlx.DB{}
+		soy, err := New[updateTestUser](db, "users", postgres.New())
+		if err != nil {
+			t.Fatalf("New() failed: %v", err)
+		}
+		if _, err := soy.Modify().Set("nonexistent_field", "x").Where("id", "=", "user_id").ExecMany(ctx, nil); err == nil {
+			t.Error("expected error to propagate from builder")
 		}
 	})
 }

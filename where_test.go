@@ -1,6 +1,7 @@
 package soy
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -559,6 +560,141 @@ func TestConditionHelpers_Between(t *testing.T) {
 		}
 		if cond.highParam != "max_age" {
 			t.Errorf("highParam = %q, want %q", cond.highParam, "max_age")
+		}
+	})
+}
+
+func TestWhereBuilder_AddWhereInSubquery(t *testing.T) {
+	sentinel.Tag("db")
+	sentinel.Tag("type")
+	sentinel.Tag("constraints")
+
+	db := &sqlx.DB{}
+	soy, err := New[whereTestUser](db, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	tbl, _ := soy.instance.TryT("users")
+	builder := astql.Select(tbl)
+	wb := newWhereBuilder(soy.instance, builder)
+
+	sub := soy.Query().Fields("id").Where("age", ">=", "min_age")
+	newBuilder, cond, err := wb.addWhereInSubquery("id", astql.IN, sub)
+	if err != nil {
+		t.Fatalf("addWhereInSubquery() error = %v", err)
+	}
+	if cond == nil {
+		t.Fatal("addWhereInSubquery() returned nil condition")
+	}
+
+	result, err := newBuilder.Render(postgres.New())
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if !strings.Contains(result.SQL, `"id" IN (SELECT`) {
+		t.Errorf("unexpected SQL: %s", result.SQL)
+	}
+}
+
+func TestWhereBuilder_AddWhereInSubquery_InvalidField(t *testing.T) {
+	sentinel.Tag("db")
+	sentinel.Tag("type")
+	sentinel.Tag("constraints")
+
+	db := &sqlx.DB{}
+	soy, err := New[whereTestUser](db, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	tbl, _ := soy.instance.TryT("users")
+	wb := newWhereBuilder(soy.instance, astql.Select(tbl))
+	sub := soy.Query().Fields("id").Where("age", ">=", "min_age")
+
+	if _, _, err := wb.addWhereInSubquery("nonexistent_field", astql.IN, sub); err == nil {
+		t.Error("addWhereInSubquery() should error with invalid field")
+	}
+}
+
+func TestWhereBuilder_AddWhereExists(t *testing.T) {
+	sentinel.Tag("db")
+	sentinel.Tag("type")
+	sentinel.Tag("constraints")
+
+	db := &sqlx.DB{}
+	soy, err := New[whereTestUser](db, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	tbl, _ := soy.instance.TryT("users")
+	wb := newWhereBuilder(soy.instance, astql.Select(tbl))
+	sub := soy.Query().Fields("id").Where("age", ">=", "min_age")
+
+	newBuilder, cond, err := wb.addWhereExists(astql.NotExists, sub)
+	if err != nil {
+		t.Fatalf("addWhereExists() error = %v", err)
+	}
+	if cond == nil {
+		t.Fatal("addWhereExists() returned nil condition")
+	}
+
+	result, err := newBuilder.Render(postgres.New())
+	if err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if !strings.Contains(result.SQL, "NOT EXISTS (SELECT") {
+		t.Errorf("unexpected SQL: %s", result.SQL)
+	}
+}
+
+func TestResolveSubquery(t *testing.T) {
+	sentinel.Tag("db")
+	sentinel.Tag("type")
+	sentinel.Tag("constraints")
+
+	db := &sqlx.DB{}
+	soy, err := New[whereTestUser](db, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	t.Run("valid subquery resolves", func(t *testing.T) {
+		sub := soy.Query().Fields("id").Where("age", ">=", "min_age")
+		b, err := resolveSubquery(sub)
+		if err != nil {
+			t.Fatalf("resolveSubquery() error = %v", err)
+		}
+		if b == nil {
+			t.Fatal("resolveSubquery() returned nil builder")
+		}
+	})
+
+	t.Run("nil interface returns ErrNilSubquery", func(t *testing.T) {
+		if _, err := resolveSubquery(nil); !errors.Is(err, ErrNilSubquery) {
+			t.Errorf("expected ErrNilSubquery, got %v", err)
+		}
+	})
+
+	t.Run("typed-nil Query returns ErrNilSubquery", func(t *testing.T) {
+		var q *Query[whereTestUser]
+		if _, err := resolveSubquery(q); !errors.Is(err, ErrNilSubquery) {
+			t.Errorf("expected ErrNilSubquery, got %v", err)
+		}
+	})
+
+	t.Run("typed-nil Select returns ErrNilSubquery", func(t *testing.T) {
+		var s *Select[whereTestUser]
+		if _, err := resolveSubquery(s); !errors.Is(err, ErrNilSubquery) {
+			t.Errorf("expected ErrNilSubquery, got %v", err)
+		}
+	})
+
+	t.Run("subquery build error propagates", func(t *testing.T) {
+		bad := soy.Query().Where("nonexistent_field", "=", "x")
+		if _, err := resolveSubquery(bad); err == nil {
+			t.Error("expected error from subquery with build error")
 		}
 	})
 }
