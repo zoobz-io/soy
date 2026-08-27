@@ -9,7 +9,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
-	github.com/zoobz-io/astql v1.0.7
+	github.com/zoobz-io/astql v1.0.11
 	github.com/zoobz-io/sentinel v1.0.4
 	github.com/zoobz-io/soy v0.0.0
 )

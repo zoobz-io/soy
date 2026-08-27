@@ -1969,3 +1969,131 @@ func TestSelect_RowLocking(t *testing.T) {
 		t.Logf("SQL: %s", result.SQL)
 	})
 }
+
+func TestSelect_WaitPolicy(t *testing.T) {
+	sentinel.Tag("db")
+	sentinel.Tag("type")
+	sentinel.Tag("constraints")
+
+	db := &sqlx.DB{}
+	soy, err := New[selectTestUser](db, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	t.Run("FOR UPDATE SKIP LOCKED", func(t *testing.T) {
+		result, err := soy.Select().Where("id", "=", "user_id").ForUpdate().SkipLocked().Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, "FOR UPDATE SKIP LOCKED") {
+			t.Errorf("SQL missing FOR UPDATE SKIP LOCKED: %s", result.SQL)
+		}
+	})
+
+	t.Run("FOR SHARE NOWAIT", func(t *testing.T) {
+		result, err := soy.Select().ForShare().NoWait().Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, "FOR SHARE NOWAIT") {
+			t.Errorf("SQL missing FOR SHARE NOWAIT: %s", result.SQL)
+		}
+	})
+
+	t.Run("SKIP LOCKED without lock mode errors", func(t *testing.T) {
+		if _, err := soy.Select().SkipLocked().Render(); err == nil {
+			t.Error("expected error: SKIP LOCKED without a lock mode")
+		}
+	})
+
+	t.Run("NOWAIT without lock mode errors", func(t *testing.T) {
+		if _, err := soy.Select().NoWait().Render(); err == nil {
+			t.Error("expected error: NOWAIT without a lock mode")
+		}
+	})
+}
+
+func TestSelect_SubqueryConditions(t *testing.T) {
+	sentinel.Tag("db")
+	sentinel.Tag("type")
+	sentinel.Tag("constraints")
+
+	db := &sqlx.DB{}
+	soy, err := New[selectTestUser](db, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	sub := func() *Query[selectTestUser] {
+		return soy.Query().Fields("id").Where("age", ">=", "min_age")
+	}
+
+	t.Run("WhereInSubquery", func(t *testing.T) {
+		result, err := soy.Select().WhereInSubquery("id", sub()).Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, `"id" IN (SELECT`) {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("WhereNotInSubquery", func(t *testing.T) {
+		result, err := soy.Select().WhereNotInSubquery("id", sub()).Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, `"id" NOT IN (SELECT`) {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("WhereExists", func(t *testing.T) {
+		result, err := soy.Select().WhereExists(sub()).Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, "EXISTS (SELECT") {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("WhereNotExists", func(t *testing.T) {
+		result, err := soy.Select().WhereNotExists(sub()).Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, "NOT EXISTS (SELECT") {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("invalid outer field errors", func(t *testing.T) {
+		if _, err := soy.Select().WhereInSubquery("nonexistent_field", sub()).Render(); err == nil {
+			t.Error("expected error for invalid outer field")
+		}
+	})
+
+	t.Run("nil subquery errors on every method", func(t *testing.T) {
+		cases := map[string]func() *Select[selectTestUser]{
+			"WhereInSubquery":    func() *Select[selectTestUser] { return soy.Select().WhereInSubquery("id", nil) },
+			"WhereNotInSubquery": func() *Select[selectTestUser] { return soy.Select().WhereNotInSubquery("id", nil) },
+			"WhereExists":        func() *Select[selectTestUser] { return soy.Select().WhereExists(nil) },
+			"WhereNotExists":     func() *Select[selectTestUser] { return soy.Select().WhereNotExists(nil) },
+		}
+		for name, build := range cases {
+			if _, err := build().Render(); err == nil {
+				t.Errorf("%s: expected error for nil subquery", name)
+			}
+		}
+	})
+
+	t.Run("subquery method short-circuits on prior error", func(t *testing.T) {
+		// First method sets the error; the second must not clobber it or panic.
+		_, err := soy.Select().WhereInSubquery("bad_field", sub()).WhereExists(sub()).Render()
+		if err == nil {
+			t.Error("expected the earlier field error to be preserved")
+		}
+	})
+}

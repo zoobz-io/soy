@@ -618,3 +618,77 @@ func TestDelete_WhereFields(t *testing.T) {
 		}
 	})
 }
+
+func TestDelete_SubqueryConditions(t *testing.T) {
+	sentinel.Tag("db")
+	sentinel.Tag("type")
+	sentinel.Tag("constraints")
+
+	db := &sqlx.DB{}
+	soy, err := New[deleteTestUser](db, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	sub := func() *Query[deleteTestUser] {
+		return soy.Query().Fields("id").Where("age", ">=", "min_age")
+	}
+
+	t.Run("WhereInSubquery renders and satisfies safety guard", func(t *testing.T) {
+		db := soy.Remove().WhereInSubquery("id", sub())
+		if !db.hasWhere {
+			t.Fatal("WhereInSubquery must satisfy the DELETE mandatory-WHERE safety guard")
+		}
+		result, err := db.Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, `DELETE FROM "users"`) || !strings.Contains(result.SQL, `"id" IN (SELECT`) {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("WhereNotInSubquery", func(t *testing.T) {
+		result, err := soy.Remove().WhereNotInSubquery("id", sub()).Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, `"id" NOT IN (SELECT`) {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("WhereExists", func(t *testing.T) {
+		result, err := soy.Remove().WhereExists(sub()).Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, "EXISTS (SELECT") {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("WhereNotExists", func(t *testing.T) {
+		result, err := soy.Remove().WhereNotExists(sub()).Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, "NOT EXISTS (SELECT") {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("nil subquery errors on every method", func(t *testing.T) {
+		cases := map[string]func() *Delete[deleteTestUser]{
+			"WhereInSubquery":    func() *Delete[deleteTestUser] { return soy.Remove().WhereInSubquery("id", nil) },
+			"WhereNotInSubquery": func() *Delete[deleteTestUser] { return soy.Remove().WhereNotInSubquery("id", nil) },
+			"WhereExists":        func() *Delete[deleteTestUser] { return soy.Remove().WhereExists(nil) },
+			"WhereNotExists":     func() *Delete[deleteTestUser] { return soy.Remove().WhereNotExists(nil) },
+		}
+		for name, build := range cases {
+			if _, err := build().Render(); err == nil {
+				t.Errorf("%s: expected error for nil subquery", name)
+			}
+		}
+	})
+}

@@ -145,6 +145,78 @@ func (qb *Query[T]) WhereFields(leftField, operator, rightField string) *Query[T
 	return qb
 }
 
+// WhereInSubquery adds a WHERE field IN (subquery) condition, where the subquery
+// is another soy query builder (Query or Select).
+//
+// Example:
+//
+//	sub := users.Query().Fields("id").Where("status", "=", "active")
+//	orders.Query().WhereInSubquery("user_id", sub)
+//	// WHERE "user_id" IN (SELECT "id" FROM "users" WHERE "status" = :status)
+func (qb *Query[T]) WhereInSubquery(field string, sub Subquery) *Query[T] {
+	if qb.err != nil {
+		return qb
+	}
+	wb := newWhereBuilder(qb.instance, qb.builder)
+	builder, _, err := wb.addWhereInSubquery(field, astql.IN, sub)
+	if err != nil {
+		qb.err = err
+		return qb
+	}
+	qb.builder = builder
+	return qb
+}
+
+// WhereNotInSubquery adds a WHERE field NOT IN (subquery) condition.
+func (qb *Query[T]) WhereNotInSubquery(field string, sub Subquery) *Query[T] {
+	if qb.err != nil {
+		return qb
+	}
+	wb := newWhereBuilder(qb.instance, qb.builder)
+	builder, _, err := wb.addWhereInSubquery(field, astql.NotIn, sub)
+	if err != nil {
+		qb.err = err
+		return qb
+	}
+	qb.builder = builder
+	return qb
+}
+
+// WhereExists adds a WHERE EXISTS (subquery) condition.
+//
+// Example:
+//
+//	sub := items.Query().Where("order_id", "=", "oid")
+//	orders.Query().WhereExists(sub)  // WHERE EXISTS (SELECT ... FROM "items" ...)
+func (qb *Query[T]) WhereExists(sub Subquery) *Query[T] {
+	if qb.err != nil {
+		return qb
+	}
+	wb := newWhereBuilder(qb.instance, qb.builder)
+	builder, _, err := wb.addWhereExists(astql.EXISTS, sub)
+	if err != nil {
+		qb.err = err
+		return qb
+	}
+	qb.builder = builder
+	return qb
+}
+
+// WhereNotExists adds a WHERE NOT EXISTS (subquery) condition.
+func (qb *Query[T]) WhereNotExists(sub Subquery) *Query[T] {
+	if qb.err != nil {
+		return qb
+	}
+	wb := newWhereBuilder(qb.instance, qb.builder)
+	builder, _, err := wb.addWhereExists(astql.NotExists, sub)
+	if err != nil {
+		qb.err = err
+		return qb
+	}
+	qb.builder = builder
+	return qb
+}
+
 // OrderBy adds an ORDER BY clause.
 // Direction must be "ASC" or "DESC" (case-insensitive).
 // Multiple calls add additional sort fields.
@@ -344,6 +416,51 @@ func (qb *Query[T]) ForShare() *Query[T] {
 func (qb *Query[T]) ForKeyShare() *Query[T] {
 	qb.builder = qb.builder.ForKeyShare()
 	return qb
+}
+
+// SkipLocked adds SKIP LOCKED to the row lock, so rows already locked by another
+// transaction are skipped instead of waited on. Must be chained after a lock mode
+// (ForUpdate/ForNoKeyUpdate/ForShare/ForKeyShare); otherwise the query errors at Exec.
+//
+// This is the canonical building block for concurrent work-queue / outbox claims,
+// where each worker grabs a distinct batch of pending rows without blocking:
+//
+//	SELECT id FROM jobs WHERE status = :pending
+//	ORDER BY created_at LIMIT :n FOR UPDATE SKIP LOCKED
+//
+// Example:
+//
+//	.ForUpdate().SkipLocked()  // FOR UPDATE SKIP LOCKED
+func (qb *Query[T]) SkipLocked() *Query[T] {
+	qb.builder = qb.builder.SkipLocked()
+	return qb
+}
+
+// NoWait adds NOWAIT to the row lock, so the query errors immediately instead of
+// waiting when a target row is already locked. Must be chained after a lock mode
+// (ForUpdate/ForNoKeyUpdate/ForShare/ForKeyShare); otherwise the query errors at Exec.
+//
+// Example:
+//
+//	.ForUpdate().NoWait()  // FOR UPDATE NOWAIT
+func (qb *Query[T]) NoWait() *Query[T] {
+	qb.builder = qb.builder.NoWait()
+	return qb
+}
+
+// subqueryBuilder implements the Subquery interface, letting a Query be embedded
+// as the right-hand side of a subquery WHERE condition (IN, EXISTS, ...).
+func (qb *Query[T]) subqueryBuilder() (*astql.Builder, error) {
+	if qb == nil {
+		return nil, ErrNilSubquery
+	}
+	if qb.err != nil {
+		return nil, qb.err
+	}
+	if qb.builder == nil {
+		return nil, ErrNilSubquery
+	}
+	return qb.builder, nil
 }
 
 // --- String Expression Methods ---

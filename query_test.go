@@ -2499,3 +2499,129 @@ func TestQuery_RowLocking(t *testing.T) {
 		t.Logf("SQL: %s", result.SQL)
 	})
 }
+
+func TestQuery_WaitPolicy(t *testing.T) {
+	sentinel.Tag("db")
+	sentinel.Tag("type")
+	sentinel.Tag("constraints")
+
+	db := &sqlx.DB{}
+	soy, err := New[queryTestUser](db, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	t.Run("FOR UPDATE SKIP LOCKED", func(t *testing.T) {
+		result, err := soy.Query().
+			Where("name", "=", "pending").
+			LimitParam("batch").
+			ForUpdate().
+			SkipLocked().
+			Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, "FOR UPDATE SKIP LOCKED") {
+			t.Errorf("SQL missing FOR UPDATE SKIP LOCKED: %s", result.SQL)
+		}
+	})
+
+	t.Run("FOR UPDATE NOWAIT", func(t *testing.T) {
+		result, err := soy.Query().ForUpdate().NoWait().Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, "FOR UPDATE NOWAIT") {
+			t.Errorf("SQL missing FOR UPDATE NOWAIT: %s", result.SQL)
+		}
+	})
+
+	t.Run("SKIP LOCKED without lock mode errors", func(t *testing.T) {
+		if _, err := soy.Query().SkipLocked().Render(); err == nil {
+			t.Error("expected error: SKIP LOCKED without a lock mode")
+		}
+	})
+
+	t.Run("NOWAIT without lock mode errors", func(t *testing.T) {
+		if _, err := soy.Query().NoWait().Render(); err == nil {
+			t.Error("expected error: NOWAIT without a lock mode")
+		}
+	})
+}
+
+func TestQuery_SubqueryConditions(t *testing.T) {
+	sentinel.Tag("db")
+	sentinel.Tag("type")
+	sentinel.Tag("constraints")
+
+	db := &sqlx.DB{}
+	soy, err := New[queryTestUser](db, "users", postgres.New())
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+
+	sub := func() *Select[queryTestUser] {
+		return soy.Select().Fields("id").Where("age", ">=", "min_age")
+	}
+
+	t.Run("WhereInSubquery", func(t *testing.T) {
+		result, err := soy.Query().WhereInSubquery("id", sub()).Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, `"id" IN (SELECT`) {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("WhereNotInSubquery", func(t *testing.T) {
+		result, err := soy.Query().WhereNotInSubquery("id", sub()).Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, `"id" NOT IN (SELECT`) {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("WhereExists", func(t *testing.T) {
+		result, err := soy.Query().WhereExists(sub()).Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, "EXISTS (SELECT") {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("WhereNotExists", func(t *testing.T) {
+		result, err := soy.Query().WhereNotExists(sub()).Render()
+		if err != nil {
+			t.Fatalf("Render() failed: %v", err)
+		}
+		if !strings.Contains(result.SQL, "NOT EXISTS (SELECT") {
+			t.Errorf("unexpected SQL: %s", result.SQL)
+		}
+	})
+
+	t.Run("subquery with build error propagates", func(t *testing.T) {
+		bad := soy.Query().Where("nonexistent_field", "=", "x")
+		if _, err := soy.Query().WhereInSubquery("id", bad).Render(); err == nil {
+			t.Error("expected error when subquery has a build error")
+		}
+	})
+
+	t.Run("nil subquery errors on every method", func(t *testing.T) {
+		cases := map[string]func() *Query[queryTestUser]{
+			"WhereInSubquery":    func() *Query[queryTestUser] { return soy.Query().WhereInSubquery("id", nil) },
+			"WhereNotInSubquery": func() *Query[queryTestUser] { return soy.Query().WhereNotInSubquery("id", nil) },
+			"WhereExists":        func() *Query[queryTestUser] { return soy.Query().WhereExists(nil) },
+			"WhereNotExists":     func() *Query[queryTestUser] { return soy.Query().WhereNotExists(nil) },
+		}
+		for name, build := range cases {
+			if _, err := build().Render(); err == nil {
+				t.Errorf("%s: expected error for nil subquery", name)
+			}
+		}
+	})
+}
